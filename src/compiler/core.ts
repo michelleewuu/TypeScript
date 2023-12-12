@@ -1910,9 +1910,11 @@ export function returnUndefined(): undefined {
  * Returns its argument.
  *
  * @internal
+ * 12/11/2023
+ * Now you call the function without specifying type arguments, and the compiler would automatically infer the types based on the usage context.
  */
-export function identity<T>(x: T) {
-    return x;
+export function identity(value: any): any {
+  return value;
 }
 
 /**
