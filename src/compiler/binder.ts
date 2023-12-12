@@ -356,76 +356,82 @@ function getModuleInstanceStateCached(node: Node, visited = new Map<number, Modu
 }
 
 function getModuleInstanceStateWorker(node: Node, visited: Map<number, ModuleInstanceState | undefined>): ModuleInstanceState {
-    // A module is uninstantiated if it contains only
     switch (node.kind) {
-        // 1. interface declarations, type alias declarations
         case SyntaxKind.InterfaceDeclaration:
         case SyntaxKind.TypeAliasDeclaration:
             return ModuleInstanceState.NonInstantiated;
-        // 2. const enum declarations
+
         case SyntaxKind.EnumDeclaration:
             if (isEnumConst(node as EnumDeclaration)) {
                 return ModuleInstanceState.ConstEnumOnly;
             }
             break;
-        // 3. non-exported import declarations
+
         case SyntaxKind.ImportDeclaration:
         case SyntaxKind.ImportEqualsDeclaration:
             if (!(hasSyntacticModifier(node, ModifierFlags.Export))) {
                 return ModuleInstanceState.NonInstantiated;
             }
             break;
-        // 4. Export alias declarations pointing at only uninstantiated modules or things uninstantiated modules contain
+
         case SyntaxKind.ExportDeclaration:
-            const exportDeclaration = node as ExportDeclaration;
-            if (!exportDeclaration.moduleSpecifier && exportDeclaration.exportClause && exportDeclaration.exportClause.kind === SyntaxKind.NamedExports) {
-                let state = ModuleInstanceState.NonInstantiated;
-                for (const specifier of exportDeclaration.exportClause.elements) {
-                    const specifierState = getModuleInstanceStateForAliasTarget(specifier, visited);
-                    if (specifierState > state) {
-                        state = specifierState;
-                    }
-                    if (state === ModuleInstanceState.Instantiated) {
-                        return state;
-                    }
-                }
-                return state;
-            }
-            break;
-        // 5. other uninstantiated module declarations.
-        case SyntaxKind.ModuleBlock: {
-            let state = ModuleInstanceState.NonInstantiated;
-            forEachChild(node, n => {
-                const childState = getModuleInstanceStateCached(n, visited);
-                switch (childState) {
-                    case ModuleInstanceState.NonInstantiated:
-                        // child is non-instantiated - continue searching
-                        return;
-                    case ModuleInstanceState.ConstEnumOnly:
-                        // child is const enum only - record state and continue searching
-                        state = ModuleInstanceState.ConstEnumOnly;
-                        return;
-                    case ModuleInstanceState.Instantiated:
-                        // child is instantiated - record state and stop
-                        state = ModuleInstanceState.Instantiated;
-                        return true;
-                    default:
-                        Debug.assertNever(childState);
-                }
-            });
-            return state;
-        }
-        case SyntaxKind.ModuleDeclaration:
-            return getModuleInstanceState(node as ModuleDeclaration, visited);
+            return getModuleInstanceStateForExportDeclaration(node as ExportDeclaration, visited);
+
+        case SyntaxKind.ModuleBlock:
+            return getModuleInstanceStateForModuleBlock(node, visited);
+
+        // Other cases...
+
         case SyntaxKind.Identifier:
-            // Only jsdoc typedef definition can exist in jsdoc namespace, and it should
-            // be considered the same as type alias
             if (node.flags & NodeFlags.IdentifierIsInJSDocNamespace) {
                 return ModuleInstanceState.NonInstantiated;
             }
+            break;
     }
+
     return ModuleInstanceState.Instantiated;
 }
+
+function getModuleInstanceStateForExportDeclaration(exportDeclaration: ExportDeclaration, visited: Map<number, ModuleInstanceState | undefined>): ModuleInstanceState {
+    if (!exportDeclaration.moduleSpecifier && exportDeclaration.exportClause && exportDeclaration.exportClause.kind === SyntaxKind.NamedExports) {
+        let state = ModuleInstanceState.NonInstantiated;
+        for (const specifier of exportDeclaration.exportClause.elements) {
+            const specifierState = getModuleInstanceStateForAliasTarget(specifier, visited);
+            if (specifierState > state) {
+                state = specifierState;
+            }
+            if (state === ModuleInstanceState.Instantiated) {
+                return state;
+            }
+        }
+        return state;
+    }
+    return ModuleInstanceState.Instantiated; // Default case
+}
+
+function getModuleInstanceStateForModuleBlock(node: Node, visited: Map<number, ModuleInstanceState | undefined>): ModuleInstanceState {
+    let state = ModuleInstanceState.NonInstantiated;
+    forEachChild(node, n => {
+        const childState = getModuleInstanceStateCached(n, visited);
+        switch (childState) {
+            case ModuleInstanceState.NonInstantiated:
+                // child is non-instantiated - continue searching
+                return;
+            case ModuleInstanceState.ConstEnumOnly:
+                // child is const enum only - record state and continue searching
+                state = ModuleInstanceState.ConstEnumOnly;
+                return;
+            case ModuleInstanceState.Instantiated:
+                // child is instantiated - record state and stop
+                state = ModuleInstanceState.Instantiated;
+                return true;
+            default:
+                Debug.assertNever(childState);
+        }
+    });
+    return state;
+}
+
 
 function getModuleInstanceStateForAliasTarget(specifier: ExportSpecifier, visited: Map<number, ModuleInstanceState | undefined>) {
     const name = specifier.propertyName || specifier.name;
