@@ -346,6 +346,8 @@ import {
     TaggedTemplateExpression,
     TemplateExpression,
     TemplateHead,
+    TemplateLiteral,
+    TemplateLiteralLikeNode,
     TemplateLiteralToken,
     TemplateLiteralTypeNode,
     TemplateLiteralTypeSpan,
@@ -917,7 +919,7 @@ const forEachChildTable: ForEachChildTable = {
     [SyntaxKind.ModuleDeclaration]: function forEachChildInModuleDeclaration<T>(node: ModuleDeclaration, cbNode: (node: Node) => T | undefined, cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
         return visitNodes(cbNode, cbNodes, node.modifiers) ||
             visitNode(cbNode, node.name) ||
-            visitNode(cbNode, node.body);
+            visitNode(cbNode, node.body);u
     },
     [SyntaxKind.ImportEqualsDeclaration]: function forEachChildInImportEqualsDeclaration<T>(node: ImportEqualsDeclaration, cbNode: (node: Node) => T | undefined, cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
         return visitNodes(cbNode, cbNodes, node.modifiers) ||
@@ -2602,12 +2604,29 @@ namespace Parser {
         }
 
         const pos = getNodePos();
-        const result = kind === SyntaxKind.Identifier ? factoryCreateIdentifier("", /*originalKeywordKind*/ undefined) :
-            isTemplateLiteralKind(kind) ? factory.createTemplateLiteralLikeNode(kind, "", "", /*templateFlags*/ undefined) :
-            kind === SyntaxKind.NumericLiteral ? factoryCreateNumericLiteral("", /*numericLiteralFlags*/ undefined) :
-            kind === SyntaxKind.StringLiteral ? factoryCreateStringLiteral("", /*isSingleQuote*/ undefined) :
-            kind === SyntaxKind.MissingDeclaration ? factory.createMissingDeclaration() :
-            factoryCreateToken(kind);
+        let result: TemplateLiteralLikeNode | NumericLiteral | StringLiteral | MissingDeclaration | Identifier | Token<T["kind"]>;
+
+        if (isTemplateLiteralKind(kind)) {
+            result = factory.createTemplateLiteralLikeNode(kind, "", "", /*templateFlags*/ undefined);
+        } else {
+            switch(kind) {
+                case SyntaxKind.Identifier:
+                    result = factory.createIdentifier("", /*originalKeywordKind*/ undefined);
+                    break;
+                case SyntaxKind.NumericLiteral:
+                    result = factory.createNumericLiteral("", /*numericLiteralFlags*/ undefined);
+                    break;
+                case SyntaxKind.StringLiteral:
+                    result = factory.createStringLiteral("", /*isSingleQuote*/ undefined);
+                    break;
+                case SyntaxKind.MissingDeclaration:
+                    result = factory.createMissingDeclaration();
+                    break;
+                default:
+                    result = factory.createToken(kind);
+                    break;
+            }
+        }
         return finishNode(result, pos) as T;
     }
 
